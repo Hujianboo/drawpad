@@ -1,5 +1,18 @@
 @import "tailwindcss";
 
-body {
+
+@theme {
+  /* 强制禁用暗色模式 */
+  --color-scheme: light;
+}
+
+/* 强制永远使用亮色模式，覆盖系统偏好 */
+:root {
+  color-scheme: light only;
+}
+
+html, body {
   margin: 0;
+  color-scheme: light only;
+  background-color: white;
 }

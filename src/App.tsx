@@ -4,7 +4,6 @@ import CanvasArea from './components/CanvasArea'
 import SavedFilesList from './components/SavedFilesList'
 
 function App() {
-  const [darkMode, setDarkMode] = useState(false)
   const [currentColor, setCurrentColor] = useState('#000000')
   const [currentTool, setCurrentTool] = useState<'pen' | 'eraser' | 'eyedropper' | 'bucket'>('pen')
   const [clearTrigger, setClearTrigger] = useState(0)
@@ -50,10 +49,8 @@ function App() {
   }, [])
 
   const handleGridSizeChange = useCallback((newSize: number) => {
-    if (confirm(`切换到 ${newSize}×${newSize} 画布将清空当前内容，确定要继续吗？`)) {
       setGridSize(newSize)
       setClearTrigger((prev) => prev + 1)
-    }
   }, [])
 
   const handleSave = useCallback(() => {
@@ -83,18 +80,16 @@ function App() {
     }
   }, [savedProjects])
 
-  // 根据网格大小动态计算像素大小，保持画布总体大小合理
+  // 固定画布大小（像素）
+  const FIXED_CANVAS_SIZE = 600
+
+  // 根据网格大小动态计算像素大小，保持画布总体大小固定
   const getPixelSize = (size: number) => {
-    if (size <= 24) return 20
-    if (size <= 32) return 16
-    if (size <= 48) return 12
-    if (size <= 64) return 8
-    if (size <= 128) return 4
-    return 2
+    return FIXED_CANVAS_SIZE / size
   }
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="flex flex-col h-screen bg-gray-50">
       {/* 主要内容区域 */}
       <div className="flex flex-1 overflow-hidden">
         {/* 左侧工具栏 */}
@@ -126,10 +121,10 @@ function App() {
         />
 
         {/* 右侧文件列表 */}
-        <SavedFilesList
+        {/* <SavedFilesList
           savedProjects={savedProjects}
           onLoadProject={handleLoadProject}
-        />
+        /> */}
       </div>
     </div>
   )

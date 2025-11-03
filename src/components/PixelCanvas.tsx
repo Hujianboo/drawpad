@@ -462,7 +462,7 @@ export default function PixelCanvas({
       sceneFunc: (context) => {
         context.beginPath()
         context.strokeStyle = '#f0f0f0'
-        context.lineWidth = 0.5
+        context.lineWidth = 1
 
         // 绘制垂直线
         for (let i = 0; i <= gridSize; i++) {
@@ -481,7 +481,7 @@ export default function PixelCanvas({
         context.stroke()
       },
     })
-    layer.add(gridShape)
+    // layer.add(gridShape)
 
     // 使用Image来渲染离屏canvas的内容
     const pixelsImage = new Konva.Image({
@@ -576,18 +576,27 @@ export default function PixelCanvas({
   useEffect(() => {
     if (stageRef.current) {
       const container = stageRef.current.container()
-      if (currentTool === 'eyedropper') {
-        container.style.cursor = 'crosshair'
-      } else if (currentTool === 'bucket') {
-        container.style.cursor = 'pointer'
-      } else {
-        container.style.cursor = 'default'
+      switch (currentTool) {
+        case 'pen':
+          container.style.cursor = 'crosshair'
+          break
+        case 'eraser':
+          container.style.cursor = 'cell'
+          break
+        case 'bucket':
+          container.style.cursor = 'cell'
+          break
+        case 'eyedropper':
+          container.style.cursor = 'url("data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\' viewBox=\'0 0 24 24\' fill=\'black\'><path d=\'M20.71 5.63l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-3.12 3.12-1.93-1.91-1.41 1.41 1.42 1.42L3 16.25V21h4.75l8.92-8.92 1.42 1.42 1.41-1.41-1.92-1.92 3.12-3.12c.4-.4.4-1.03.01-1.42zM6.92 19L5 17.08l8.06-8.06 1.92 1.92L6.92 19z\'/></svg>") 0 20, crosshair'
+          break
+        default:
+          container.style.cursor = 'default'
       }
     }
   }, [currentTool])
 
   return (
-    <div className="inline-block border border-gray-300 dark:border-gray-600 shadow-sm">
+    <div className="inline-block border border-gray-300 shadow-sm">
       <div id="canvas-container"></div>
     </div>
   )
