@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm add:*)",
+      "Bash(mkdir:*)",
+      "Bash(pnpm exec tailwindcss:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
