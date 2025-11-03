@@ -2,11 +2,16 @@ import { useState, useEffect } from 'react'
 
 interface DrawingToolbarProps {
   currentColor: string
-  currentTool: 'pen' | 'eraser' | 'eyedropper'
+  currentTool: 'pen' | 'eraser' | 'eyedropper' | 'bucket'
+  gridSize: number
+  brushSize: number
   onColorChange: (color: string) => void
-  onToolChange: (tool: 'pen' | 'eraser' | 'eyedropper') => void
+  onToolChange: (tool: 'pen' | 'eraser' | 'eyedropper' | 'bucket') => void
   onClear: () => void
   onExport: () => void
+  onImport: () => void
+  onGridSizeChange: (size: number) => void
+  onBrushSizeChange: (size: number) => void
 }
 
 const PRESET_COLORS = [
@@ -27,10 +32,15 @@ const PRESET_COLORS = [
 export default function DrawingToolbar({
   currentColor,
   currentTool,
+  gridSize,
+  brushSize,
   onColorChange,
   onToolChange,
   onClear,
   onExport,
+  onImport,
+  onGridSizeChange,
+  onBrushSizeChange,
 }: DrawingToolbarProps) {
   const [customColor, setCustomColor] = useState('#000000')
 
@@ -44,7 +54,7 @@ export default function DrawingToolbar({
       {/* 工具选择 */}
       <div>
         <h3 className="mb-2.5 text-lg font-semibold">工具</h3>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => onToolChange('pen')}
             className={`px-4 py-2 rounded cursor-pointer transition-all ${
@@ -74,6 +84,120 @@ export default function DrawingToolbar({
             }`}
           >
             💧 吸色器
+          </button>
+          <button
+            onClick={() => onToolChange('bucket')}
+            className={`px-4 py-2 rounded cursor-pointer transition-all ${
+              currentTool === 'bucket'
+                ? 'border-2 border-blue-500 bg-blue-50'
+                : 'border border-gray-300 bg-white hover:bg-gray-50'
+            }`}
+          >
+            🪣 油漆桶
+          </button>
+        </div>
+      </div>
+
+      {/* 画布尺寸 */}
+      <div>
+        <h3 className="mb-2.5 text-lg font-semibold">画布尺寸</h3>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => onGridSizeChange(16)}
+            className={`px-3 py-2 rounded cursor-pointer transition-all text-sm ${
+              gridSize === 16
+                ? 'border-2 border-blue-500 bg-blue-50'
+                : 'border border-gray-300 bg-white hover:bg-gray-50'
+            }`}
+          >
+            16×16
+          </button>
+          <button
+            onClick={() => onGridSizeChange(32)}
+            className={`px-3 py-2 rounded cursor-pointer transition-all text-sm ${
+              gridSize === 32
+                ? 'border-2 border-blue-500 bg-blue-50'
+                : 'border border-gray-300 bg-white hover:bg-gray-50'
+            }`}
+          >
+            32×32
+          </button>
+          <button
+            onClick={() => onGridSizeChange(64)}
+            className={`px-3 py-2 rounded cursor-pointer transition-all text-sm ${
+              gridSize === 64
+                ? 'border-2 border-blue-500 bg-blue-50'
+                : 'border border-gray-300 bg-white hover:bg-gray-50'
+            }`}
+          >
+            64×64
+          </button>
+          <button
+            onClick={() => onGridSizeChange(128)}
+            className={`px-3 py-2 rounded cursor-pointer transition-all text-sm ${
+              gridSize === 128
+                ? 'border-2 border-blue-500 bg-blue-50'
+                : 'border border-gray-300 bg-white hover:bg-gray-50'
+            }`}
+          >
+            128×128
+          </button>
+          <button
+            onClick={() => onGridSizeChange(256)}
+            className={`px-3 py-2 rounded cursor-pointer transition-all text-sm ${
+              gridSize === 256
+                ? 'border-2 border-blue-500 bg-blue-50'
+                : 'border border-gray-300 bg-white hover:bg-gray-50'
+            }`}
+          >
+            256×256
+          </button>
+        </div>
+      </div>
+
+      {/* 画笔大小 */}
+      <div>
+        <h3 className="mb-2.5 text-lg font-semibold">画笔大小</h3>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => onBrushSizeChange(1)}
+            className={`px-3 py-2 rounded cursor-pointer transition-all text-sm ${
+              brushSize === 1
+                ? 'border-2 border-blue-500 bg-blue-50'
+                : 'border border-gray-300 bg-white hover:bg-gray-50'
+            }`}
+          >
+            1px
+          </button>
+          <button
+            onClick={() => onBrushSizeChange(2)}
+            className={`px-3 py-2 rounded cursor-pointer transition-all text-sm ${
+              brushSize === 2
+                ? 'border-2 border-blue-500 bg-blue-50'
+                : 'border border-gray-300 bg-white hover:bg-gray-50'
+            }`}
+          >
+            2px
+          </button>
+          <button
+            onClick={() => onBrushSizeChange(3)}
+            className={`px-3 py-2 rounded cursor-pointer transition-all text-sm ${
+              brushSize === 3
+                ? 'border-2 border-blue-500 bg-blue-50'
+                : 'border border-gray-300 bg-white hover:bg-gray-50'
+            }`}
+          >
+            3px
+          </button>
+          <button
+            onClick={() => onBrushSizeChange(5)}
+            className={`px-3 py-2 rounded cursor-pointer transition-all text-sm ${
+              brushSize === 5
+                ? 'border-2 border-blue-500 bg-blue-50'
+                : 'border border-gray-300 bg-white hover:bg-gray-50'
+            }`}
+          >
+            5px
           </button>
         </div>
       </div>
@@ -127,16 +251,22 @@ export default function DrawingToolbar({
         <h3 className="mb-2.5 text-lg font-semibold">操作</h3>
         <div className="flex flex-col gap-2.5">
           <button
-            onClick={onClear}
-            className="px-5 py-2.5 bg-red-600 text-white border-none cursor-pointer rounded hover:bg-red-700 transition-colors"
+            onClick={onImport}
+            className="px-5 py-2.5 bg-blue-600 text-white border-none cursor-pointer rounded hover:bg-blue-700 transition-colors"
           >
-            🗑️ 清空画布
+            📁 导入图片
           </button>
           <button
             onClick={onExport}
             className="px-5 py-2.5 bg-green-600 text-white border-none cursor-pointer rounded hover:bg-green-700 transition-colors"
           >
             💾 导出图片
+          </button>
+          <button
+            onClick={onClear}
+            className="px-5 py-2.5 bg-red-600 text-white border-none cursor-pointer rounded hover:bg-red-700 transition-colors"
+          >
+            🗑️ 清空画布
           </button>
         </div>
       </div>

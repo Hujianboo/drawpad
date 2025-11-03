@@ -3,7 +3,8 @@
     "allow": [
       "Bash(pnpm add:*)",
       "Bash(mkdir:*)",
-      "Bash(pnpm exec tailwindcss:*)"
+      "Bash(pnpm exec tailwindcss:*)",
+      "Bash(pnpm dev:*)"
     ],
     "deny": [],
     "ask": []
