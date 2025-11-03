@@ -1,5 +1,4 @@
 import { useRef, useState, useCallback, useEffect } from 'react'
-import { Stage, Layer, Rect, Line } from 'react-konva'
 import Konva from 'konva'
 
 interface PixelData {
@@ -37,6 +36,8 @@ export default function PixelCanvas({
   const [isDrawing, setIsDrawing] = useState(false)
   const stageRef = useRef<Konva.Stage>(null)
   const lastPosRef = useRef<{ col: number; row: number } | null>(null)
+  const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const offscreenCtxRef = useRef<CanvasRenderingContext2D | null>(null)
 
   const canvasWidth = gridSize * pixelSize
   const canvasHeight = gridSize * pixelSize
@@ -173,20 +174,52 @@ export default function PixelCanvas({
     [brushSize, collectPixels]
   )
 
-  // 批量应用像素更新
+  // 批量应用像素更新（增量更新到离屏canvas）
   const applyPixelUpdates = useCallback((pixelsToUpdate: Map<string, PixelData | null>) => {
+    const offscreenCtx = offscreenCtxRef.current
+
     setPixels((prev) => {
       const newPixels = new Map(prev)
-      pixelsToUpdate.forEach((pixelData, key) => {
-        if (pixelData === null) {
-          newPixels.delete(key)
-        } else {
-          newPixels.set(key, pixelData)
+
+      // 如果有离屏canvas，立即增量更新
+      if (offscreenCtx) {
+        pixelsToUpdate.forEach((pixelData, key) => {
+          if (pixelData === null) {
+            // 删除像素 - 清除该区域
+            const oldPixel = prev.get(key)
+            if (oldPixel) {
+              offscreenCtx.clearRect(oldPixel.x, oldPixel.y, pixelSize, pixelSize)
+            }
+            newPixels.delete(key)
+          } else {
+            // 添加或更新像素
+            offscreenCtx.fillStyle = pixelData.color
+            offscreenCtx.fillRect(pixelData.x, pixelData.y, pixelSize, pixelSize)
+            newPixels.set(key, pixelData)
+          }
+        })
+
+        // 触发Konva重绘
+        if (stageRef.current) {
+          const pixelsImage = (stageRef.current as any).pixelsImage
+          if (pixelsImage) {
+            pixelsImage.getLayer()?.batchDraw()
+          }
         }
-      })
+      } else {
+        // 没有离屏canvas时的回退逻辑
+        pixelsToUpdate.forEach((pixelData, key) => {
+          if (pixelData === null) {
+            newPixels.delete(key)
+          } else {
+            newPixels.set(key, pixelData)
+          }
+        })
+      }
+
       return newPixels
     })
-  }, [])
+  }, [pixelSize])
 
   // Bresenham 直线算法 - 填补两点之间的像素（支持画笔大小，批量更新）
   const drawLine = useCallback(
@@ -240,9 +273,11 @@ export default function PixelCanvas({
     []
   )
 
-  // 油漆桶填充算法（Flood Fill）
+  // 油漆桶填充算法（Flood Fill）- 使用增量更新和批量重绘
   const floodFill = useCallback(
     (startCol: number, startRow: number) => {
+      const offscreenCtx = offscreenCtxRef.current
+
       setPixels((prev) => {
         const newPixels = new Map(prev)
         const targetColor = getPixelColor(startCol, startRow, prev)
@@ -256,6 +291,7 @@ export default function PixelCanvas({
         // 使用队列实现广度优先搜索（BFS）
         const queue: Array<{ col: number; row: number }> = [{ col: startCol, row: startRow }]
         const visited = new Set<string>()
+1
 
         while (queue.length > 0) {
           const { col, row } = queue.shift()!
@@ -276,17 +312,31 @@ export default function PixelCanvas({
           visited.add(key)
 
           // 填充当前像素
-          newPixels.set(key, {
+          const pixelData = {
             x: col * pixelSize,
             y: row * pixelSize,
             color: fillColor,
-          })
+          }
+          newPixels.set(key, pixelData)
+
+          // 增量更新到离屏canvas
+          if (offscreenCtx) {
+            offscreenCtx.fillRect(pixelData.x, pixelData.y, pixelSize, pixelSize)
+          }
 
           // 将四个相邻像素加入队列
           queue.push({ col: col + 1, row })
           queue.push({ col: col - 1, row })
           queue.push({ col, row: row + 1 })
           queue.push({ col, row: row - 1 })
+        }
+
+        // 最终重绘
+        if (offscreenCtx && stageRef.current) {
+          const pixelsImage = (stageRef.current as any).pixelsImage
+          if (pixelsImage) {
+            pixelsImage.getLayer()?.batchDraw()
+          }
         }
 
         return newPixels
@@ -370,63 +420,175 @@ export default function PixelCanvas({
     lastPosRef.current = null
   }
 
-  // 生成网格线
-  const gridLines = []
-  // 垂直线
-  for (let i = 0; i <= gridSize; i++) {
-    gridLines.push(
-      <Line
-        key={`v-${i}`}
-        points={[i * pixelSize, 0, i * pixelSize, canvasHeight]}
-        stroke="#e0e0e0"
-        strokeWidth={1}
-      />
-    )
-  }
-  // 水平线
-  for (let i = 0; i <= gridSize; i++) {
-    gridLines.push(
-      <Line
-        key={`h-${i}`}
-        points={[0, i * pixelSize, canvasWidth, i * pixelSize]}
-        stroke="#e0e0e0"
-        strokeWidth={1}
-      />
-    )
-  }
-  console.log(gridLines)
+  // 初始化离屏canvas和Konva Stage
+  useEffect(() => {
+    // 创建离屏canvas用于缓存像素
+    const offscreenCanvas = document.createElement('canvas')
+    offscreenCanvas.width = canvasWidth
+    offscreenCanvas.height = canvasHeight
+    const offscreenCtx = offscreenCanvas.getContext('2d', { willReadFrequently: true })
+    if (!offscreenCtx) return
+
+    offscreenCanvasRef.current = offscreenCanvas
+    offscreenCtxRef.current = offscreenCtx
+
+    // 销毁旧的 stage
+    if (stageRef.current) {
+      stageRef.current.destroy()
+      stageRef.current = null
+    }
+
+    const stage = new Konva.Stage({
+      container: 'canvas-container',
+      width: canvasWidth,
+      height: canvasHeight,
+    })
+
+    const layer = new Konva.Layer()
+    stage.add(layer)
+
+    // 背景
+    const background = new Konva.Rect({
+      x: 0,
+      y: 0,
+      width: canvasWidth,
+      height: canvasHeight,
+      fill: '#ffffff',
+    })
+    layer.add(background)
+
+    // 使用自定义 Shape 一次性绘制所有网格线
+    const gridShape = new Konva.Shape({
+      sceneFunc: (context) => {
+        context.beginPath()
+        context.strokeStyle = '#f0f0f0'
+        context.lineWidth = 0.5
+
+        // 绘制垂直线
+        for (let i = 0; i <= gridSize; i++) {
+          const x = i * pixelSize
+          context.moveTo(x, 0)
+          context.lineTo(x, canvasHeight)
+        }
+
+        // 绘制水平线
+        for (let i = 0; i <= gridSize; i++) {
+          const y = i * pixelSize
+          context.moveTo(0, y)
+          context.lineTo(canvasWidth, y)
+        }
+
+        context.stroke()
+      },
+    })
+    layer.add(gridShape)
+
+    // 使用Image来渲染离屏canvas的内容
+    const pixelsImage = new Konva.Image({
+      x: 0,
+      y: 0,
+      image: offscreenCanvas,
+    })
+    layer.add(pixelsImage)
+
+    // 存储引用
+    ;(stage as any).pixelsImage = pixelsImage
+    ;(stage as any).offscreenCanvas = offscreenCanvas
+    ;(stage as any).offscreenCtx = offscreenCtx
+
+    layer.draw()
+    stageRef.current = stage
+
+    return () => {
+      if (stageRef.current) {
+        stageRef.current.destroy()
+        stageRef.current = null
+      }
+      offscreenCanvasRef.current = null
+      offscreenCtxRef.current = null
+    }
+  }, [canvasWidth, canvasHeight, gridSize, pixelSize])
+
+  // 更新事件监听器
+  useEffect(() => {
+    const stage = stageRef.current
+    if (!stage) return
+
+    const handleMouseDownWrapper = () => {
+      const pos = stage.getPointerPosition()
+      if (!pos) return
+      handleMouseDown({ target: { getStage: () => stage } } as any)
+    }
+
+    const handleMouseMoveWrapper = () => {
+      handleMouseMove({ target: { getStage: () => stage } } as any)
+    }
+
+    const handleMouseUpWrapper = () => {
+      handleMouseUp()
+    }
+
+    // 移除旧的事件监听器
+    stage.off('mousedown')
+    stage.off('mousemove')
+    stage.off('mouseup')
+    stage.off('mouseleave')
+
+    // 添加新的事件监听器
+    stage.on('mousedown', handleMouseDownWrapper)
+    stage.on('mousemove', handleMouseMoveWrapper)
+    stage.on('mouseup', handleMouseUpWrapper)
+    stage.on('mouseleave', handleMouseUpWrapper)
+
+    return () => {
+      stage.off('mousedown', handleMouseDownWrapper)
+      stage.off('mousemove', handleMouseMoveWrapper)
+      stage.off('mouseup', handleMouseUpWrapper)
+      stage.off('mouseleave', handleMouseUpWrapper)
+    }
+  }, [handleMouseDown, handleMouseMove, handleMouseUp])
+
+  // 更新像素渲染 - 使用离屏canvas优化
+  useEffect(() => {
+    const stage = stageRef.current
+    const offscreenCtx = offscreenCtxRef.current
+    const offscreenCanvas = offscreenCanvasRef.current
+
+    if (!stage || !offscreenCtx || !offscreenCanvas) return
+
+    // 清空离屏canvas
+    offscreenCtx.clearRect(0, 0, canvasWidth, canvasHeight)
+
+    // 在离屏canvas上绘制所有像素
+    pixels.forEach((pixel) => {
+      offscreenCtx.fillStyle = pixel.color
+      offscreenCtx.fillRect(pixel.x, pixel.y, pixelSize, pixelSize)
+    })
+
+    // 更新Konva Image
+    const pixelsImage = (stage as any).pixelsImage
+    if (pixelsImage) {
+      pixelsImage.getLayer()?.batchDraw()
+    }
+  }, [pixels, canvasWidth, canvasHeight, pixelSize])
+
+  // 更新鼠标样式
+  useEffect(() => {
+    if (stageRef.current) {
+      const container = stageRef.current.container()
+      if (currentTool === 'eyedropper') {
+        container.style.cursor = 'crosshair'
+      } else if (currentTool === 'bucket') {
+        container.style.cursor = 'pointer'
+      } else {
+        container.style.cursor = 'default'
+      }
+    }
+  }, [currentTool])
+
   return (
-    <div className="inline-block border-2 border-gray-800 shadow-lg">
-      <Stage
-        width={canvasWidth}
-        height={canvasHeight}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        ref={stageRef}
-        style={{ cursor: currentTool === 'eyedropper' ? 'crosshair' : currentTool === 'bucket' ? 'pointer' : 'default' }}
-      >
-        <Layer>
-          {/* 背景 */}
-          <Rect x={0} y={0} width={canvasWidth} height={canvasHeight} fill="#ffffff" />
-
-          {/* 网格线 */}
-          {gridLines}
-
-          {/* 像素 */}
-          {Array.from(pixels.values()).map((pixel, index) => (
-            <Rect
-              key={index}
-              x={pixel.x}
-              y={pixel.y}
-              width={pixelSize}
-              height={pixelSize}
-              fill={pixel.color}
-            />
-          ))}
-        </Layer>
-      </Stage>
+    <div className="inline-block border border-gray-300 dark:border-gray-600 shadow-sm">
+      <div id="canvas-container"></div>
     </div>
   )
 }
