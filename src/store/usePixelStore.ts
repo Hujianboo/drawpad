@@ -85,7 +85,6 @@ export const usePixelStore = create<PixelStore>((set, get) => ({
     set({ pixels: new Map(pixels) })
   },
 
-  // 更新像素数据（支持批量更新）
   updatePixels: (updates) => {
     set((state) => {
       const newPixels = new Map(state.pixels)
