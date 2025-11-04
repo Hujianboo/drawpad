@@ -314,15 +314,26 @@ export const PixelCanvas = ({
     const coords = getPixelCoords(pos.x, pos.y)
     if (!coords) return
 
-    // 吸色器工具
+    // 吸色器工具 - 从画面上吸取任意颜色
     if (currentTool === 'eyedropper') {
-      const key = `${coords.col},${coords.row}`
-      const pixel = pixels.get(key)
-      if (pixel && onColorPick) {
-        onColorPick(pixel.color)
-        // 吸色成功后自动切换回画笔工具
-        if (onToolChange) {
-          onToolChange('pen')
+      // 使用 Konva 的 toCanvas 方法获取当前画面
+      const canvas = stage.toCanvas()
+      const ctx = canvas.getContext('2d')
+      if (ctx && onColorPick) {
+        // 获取点击位置的像素颜色
+        const imageData = ctx.getImageData(pos.x, pos.y, 1, 1)
+        const [r, g, b, a] = imageData.data
+
+        // 只有不透明的像素才吸取
+        if (a > 0) {
+          // 转换为十六进制颜色
+          const color = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
+          onColorPick(color)
+
+          // 吸色成功后自动切换回画笔工具
+          if (onToolChange) {
+            onToolChange('pen')
+          }
         }
       }
       return

@@ -53,6 +53,7 @@ function App() {
   // ⭐ 键盘快捷键
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // 撤销/重做快捷键
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault()
         handleUndo()
@@ -62,6 +63,17 @@ function App() {
       } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
         e.preventDefault()
         handleRedo()
+      }
+      // 工具切换快捷键（不需要 Ctrl/Cmd 修饰键）
+      else if (e.key === 'b' || e.key === 'B') {
+        e.preventDefault()
+        setCurrentTool('pen')
+      } else if (e.key === 'e' || e.key === 'E') {
+        e.preventDefault()
+        setCurrentTool('eraser')
+      } else if (e.key === 'i' || e.key === 'I') {
+        e.preventDefault()
+        setCurrentTool('eyedropper')
       }
     }
 
