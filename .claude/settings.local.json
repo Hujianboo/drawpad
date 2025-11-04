@@ -4,7 +4,8 @@
       "Bash(pnpm add:*)",
       "Bash(mkdir:*)",
       "Bash(pnpm exec tailwindcss:*)",
-      "Bash(pnpm dev:*)"
+      "Bash(pnpm dev:*)",
+      "Bash(pnpm build:*)"
     ],
     "deny": [],
     "ask": []

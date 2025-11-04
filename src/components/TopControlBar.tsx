@@ -1,6 +1,5 @@
 interface TopControlBarProps {
   gridSize: number
-  currentColor: string
   canUndo?: boolean
   canRedo?: boolean
   onGridSizeChange?: (size: number) => void
@@ -13,7 +12,6 @@ interface TopControlBarProps {
 
 export const TopControlBar = ({
   gridSize,
-  currentColor,
   canUndo = false,
   canRedo = false,
   onGridSizeChange,

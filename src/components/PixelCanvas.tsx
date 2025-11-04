@@ -1,18 +1,6 @@
-import { useRef, useState, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react'
+import { useRef, useCallback, useEffect } from 'react'
 import Konva from 'konva'
-
-interface PixelData {
-  x: number
-  y: number
-  color: string
-}
-export interface PixelCanvasHandle {
-  undo: () => void
-  redo: () => void
-  clear: () => void
-  exportImage: () => void
-  importImage: () => void
-}
+import { usePixelStore, type PixelData } from '../store/usePixelStore'
 
 interface PixelCanvasProps {
   gridSize?: number
@@ -25,7 +13,8 @@ interface PixelCanvasProps {
   onToolChange?: (tool: 'pen' | 'eraser' | 'eyedropper' | 'bucket') => void
   onHistoryChange?: (canUndo: boolean, canRedo: boolean) => void
 }
-export const PixelCanvas = forwardRef<PixelCanvasHandle, PixelCanvasProps>(({
+
+export const PixelCanvas = ({
   gridSize = 32,
   pixelSize = 20,
   currentColor,
@@ -35,18 +24,26 @@ export const PixelCanvas = forwardRef<PixelCanvasHandle, PixelCanvasProps>(({
   onColorPick,
   onToolChange,
   onHistoryChange,
-}, ref) => {
-  const [pixels, setPixels] = useState<Map<string, PixelData>>(new Map())
-  const [isDrawing, setIsDrawing] = useState(false)
+}: PixelCanvasProps) => {
+  // 使用 zustand store 管理数据状态
+  const pixels = usePixelStore((state) => state.pixels)
+  const isDrawing = usePixelStore((state) => state.isDrawing)
+  const setIsDrawing = usePixelStore((state) => state.setIsDrawing)
+  const updatePixels = usePixelStore((state) => state.updatePixels)
+  const saveHistory = usePixelStore((state) => state.saveHistory)
+  const canUndo = usePixelStore((state) => state.canUndo)
+  const canRedo = usePixelStore((state) => state.canRedo)
+  const getPixelAt = usePixelStore((state) => state.getPixelAt)
+  const setOffscreenCanvas = usePixelStore((state) => state.setOffscreenCanvas)
+  const setGridSize = usePixelStore((state) => state.setGridSize)
+  const setPixelSize = usePixelStore((state) => state.setPixelSize)
+
+  // Konva 和 Canvas 相关的 refs（不放入 zustand）
   const stageRef = useRef<Konva.Stage>(null)
   const lastPosRef = useRef<{ col: number; row: number } | null>(null)
   const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const offscreenCtxRef = useRef<CanvasRenderingContext2D | null>(null)
   const showCheckerboardRef = useRef(showCheckerboard)
-  //历史记录管理
-  const historyRef = useRef<Map<string, PixelData>[]>([new Map()])
-  const historyIndexRef = useRef(0)
-  const isRestoringRef = useRef(false)
 
   // 更新 ref 当 showCheckerboard 改变时
   useEffect(() => {
@@ -55,216 +52,53 @@ export const PixelCanvas = forwardRef<PixelCanvasHandle, PixelCanvasProps>(({
 
   const canvasWidth = gridSize * pixelSize
   const canvasHeight = gridSize * pixelSize
-    // 通知历史状态变化
+
+  // 通知历史状态变化
   const notifyHistoryChange = useCallback(() => {
-      if (onHistoryChange) {
-        onHistoryChange(
-          historyIndexRef.current > 0,
-          historyIndexRef.current < historyRef.current.length - 1
-        )
-      }
-    }, [onHistoryChange])
-    // 保存历史记录
-    const saveHistory = useCallback((newPixels: Map<string, PixelData>) => {
-      if (isRestoringRef.current) return
-
-      // 检查是否和当前历史状态相同，避免保存重复状态
-      const currentState = historyRef.current[historyIndexRef.current]
-      if (currentState && currentState.size === newPixels.size) {
-        let isSame = true
-        for (const [key, value] of newPixels) {
-          const currentValue = currentState.get(key)
-          if (!currentValue || currentValue.color !== value.color) {
-            isSame = false
-            break
-          }
-        }
-        if (isSame) {
-          return
-        }
-      }
-
-      historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1)
-      historyRef.current.push(new Map(newPixels))
-      historyIndexRef.current = historyRef.current.length - 1
-
-      const MAX_HISTORY = 50
-      if (historyRef.current.length > MAX_HISTORY) {
-        historyRef.current.shift()
-        historyIndexRef.current--
-      }
-      notifyHistoryChange()
-    }, [notifyHistoryChange])
-    // 恢复离屏Canvas
-    const restoreOffscreenCanvas = useCallback((pixelsMap: Map<string, PixelData>) => {
-      const offscreenCtx = offscreenCtxRef.current
-      if (!offscreenCtx) return
-
-      // 清空整个画布为透明
-      offscreenCtx.clearRect(0, 0, canvasWidth, canvasHeight)
-
-      // 绘制所有像素 - 使用稍大的尺寸消除缝隙
-      pixelsMap.forEach((pixel) => {
-        offscreenCtx.fillStyle = pixel.color
-        offscreenCtx.fillRect(
-          pixel.x,
-          pixel.y,
-          pixelSize + 0.5,
-          pixelSize + 0.5
-        )
-      })
-
-      if (stageRef.current) {
-        const pixelsImage = (stageRef.current as any).pixelsImage
-        if (pixelsImage) {
-          pixelsImage.getLayer()?.batchDraw()
-        }
-      }
-    }, [canvasWidth, canvasHeight, pixelSize])
-
-   // ⭐ 撤销方法
-   const undo = useCallback(() => {
-    if (historyIndexRef.current > 0) {
-      historyIndexRef.current--
-      const previousState = historyRef.current[historyIndexRef.current]
-      isRestoringRef.current = true
-      setPixels(new Map(previousState))
-      restoreOffscreenCanvas(previousState)
-      isRestoringRef.current = false
-
-      notifyHistoryChange()
+    if (onHistoryChange) {
+      onHistoryChange(canUndo(), canRedo())
     }
-  }, [restoreOffscreenCanvas, notifyHistoryChange])
+  }, [onHistoryChange, canUndo, canRedo])
 
-  // ⭐ 重做方法
-  const redo = useCallback(() => {
-    if (historyIndexRef.current < historyRef.current.length - 1) {
-      historyIndexRef.current++
-      const nextState = historyRef.current[historyIndexRef.current]
-      
-      isRestoringRef.current = true
-      setPixels(new Map(nextState))
-      restoreOffscreenCanvas(nextState)
-      isRestoringRef.current = false
-
-      notifyHistoryChange()
-    }
-  }, [restoreOffscreenCanvas, notifyHistoryChange])
-
-  // ⭐ 清空画布方法
-  const clear = useCallback(() => {
-    const emptyMap = new Map<string, PixelData>()
-    setPixels(emptyMap)
-    historyRef.current = [emptyMap]
-    historyIndexRef.current = 0
-
-    const offscreenCtx = offscreenCtxRef.current
-    if (offscreenCtx) {
-      // 清空画布为透明
-      offscreenCtx.clearRect(0, 0, canvasWidth, canvasHeight)
-    }
-
+  // 监听历史状态变化并通知父组件
+  useEffect(() => {
     notifyHistoryChange()
-  }, [canvasWidth, canvasHeight, notifyHistoryChange])
+  }, [pixels, notifyHistoryChange])
 
-  // ⭐ 导出图片方法 - 只导出像素层，不包含背景
-  const exportImage = useCallback(() => {
-    const offscreenCanvas = offscreenCanvasRef.current
-    if (!offscreenCanvas) return
+  // 恢复离屏Canvas
+  const restoreOffscreenCanvas = useCallback((pixelsMap: Map<string, PixelData>) => {
+    const offscreenCtx = offscreenCtxRef.current
+    if (!offscreenCtx) return
 
-    // 创建一个临时canvas，背景为白色
-    const exportCanvas = document.createElement('canvas')
-    exportCanvas.width = canvasWidth
-    exportCanvas.height = canvasHeight
-    const exportCtx = exportCanvas.getContext('2d')
-    if (!exportCtx) return
+    // 清空整个画布为透明
+    offscreenCtx.clearRect(0, 0, canvasWidth, canvasHeight)
 
-    // 填充白色背景
-    exportCtx.fillStyle = '#ffffff'
-    exportCtx.fillRect(0, 0, canvasWidth, canvasHeight)
+    // 绘制所有像素 - 使用稍大的尺寸消除缝隙
+    pixelsMap.forEach((pixel) => {
+      offscreenCtx.fillStyle = pixel.color
+      offscreenCtx.fillRect(
+        pixel.x,
+        pixel.y,
+        pixelSize + 0.5,
+        pixelSize + 0.5
+      )
+    })
 
-    // 将像素内容绘制到导出canvas上
-    exportCtx.drawImage(offscreenCanvas, 0, 0)
-
-    // 导出为PNG
-    const dataUrl = exportCanvas.toDataURL('image/png')
-    const link = document.createElement('a')
-    link.download = `pixel-art-${Date.now()}.png`
-    link.href = dataUrl
-    link.click()
-  }, [canvasWidth, canvasHeight])
-
-  // ⭐ 导入图片方法
-  const importImage = useCallback(() => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = 'image/*'
-
-    input.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0]
-      if (!file) return
-
-      const reader = new FileReader()
-      reader.onload = (event) => {
-        const img = new Image()
-        img.onload = () => {
-          const canvas = document.createElement('canvas')
-          const ctx = canvas.getContext('2d')
-          if (!ctx) return
-
-          canvas.width = gridSize
-          canvas.height = gridSize
-          ctx.drawImage(img, 0, 0, gridSize, gridSize)
-
-          const imageData = ctx.getImageData(0, 0, gridSize, gridSize)
-          const data = imageData.data
-
-          const newPixels = new Map<string, PixelData>()
-          for (let row = 0; row < gridSize; row++) {
-            for (let col = 0; col < gridSize; col++) {
-              const index = (row * gridSize + col) * 4
-              const r = data[index]
-              const g = data[index + 1]
-              const b = data[index + 2]
-              const a = data[index + 3]
-
-              if (a > 128) {
-                const color = `#${r.toString(16).padStart(2, '0')}${g
-                  .toString(16)
-                  .padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
-                newPixels.set(`${col},${row}`, {
-                  x: col * pixelSize,
-                  y: row * pixelSize,
-                  color: color,
-                })
-              }
-            }
-          }
-
-          setPixels(newPixels)
-          restoreOffscreenCanvas(newPixels)
-          saveHistory(newPixels)
-        }
-        img.src = event.target?.result as string
+    if (stageRef.current) {
+      const pixelsImage = (stageRef.current as any).pixelsImage
+      if (pixelsImage) {
+        pixelsImage.getLayer()?.batchDraw()
       }
-      reader.readAsDataURL(file)
     }
+  }, [canvasWidth, canvasHeight, pixelSize])
 
-    input.click()
-  }, [gridSize, pixelSize, restoreOffscreenCanvas, saveHistory])
-
-// ⭐ 使用 useImperativeHandle 暴露方法给父组件
-useImperativeHandle(
-  ref,
-  () => ({
-    undo,
-    redo,
-    clear,
-    exportImage,
-    importImage,
-  }),
-  [undo, redo, clear, exportImage, importImage]
-)
+  // 监听 pixels 变化来重绘画布（用于撤销/重做/清空/导入）
+  useEffect(() => {
+    // 只在非绘制状态下（即外部操作如撤销、重做等）才完全重绘
+    if (!isDrawing && offscreenCtxRef.current) {
+      restoreOffscreenCanvas(pixels)
+    }
+  }, [pixels, isDrawing, restoreOffscreenCanvas])
   // 获取像素坐标
   const getPixelCoords = useCallback(
     (x: number, y: number) => {
@@ -315,56 +149,42 @@ useImperativeHandle(
   const applyPixelUpdates = useCallback((pixelsToUpdate: Map<string, PixelData | null>) => {
     const offscreenCtx = offscreenCtxRef.current
 
-    setPixels((prev) => {
-      const newPixels = new Map(prev)
+    // 如果有离屏canvas，立即增量更新
+    if (offscreenCtx) {
+      pixelsToUpdate.forEach((pixelData, key) => {
+        if (pixelData === null) {
+          // 删除像素 - 从 key 中解析坐标并清除为透明
+          const [colStr, rowStr] = key.split(',')
+          const col = parseInt(colStr, 10)
+          const row = parseInt(rowStr, 10)
+          const x = col * pixelSize
+          const y = row * pixelSize
 
-      // 如果有离屏canvas，立即增量更新
-      if (offscreenCtx) {
-        pixelsToUpdate.forEach((pixelData, key) => {
-          if (pixelData === null) {
-            // 删除像素 - 从 key 中解析坐标并清除为透明
-            const [colStr, rowStr] = key.split(',')
-            const col = parseInt(colStr, 10)
-            const row = parseInt(rowStr, 10)
-            const x = col * pixelSize
-            const y = row * pixelSize
-
-            offscreenCtx.clearRect(x, y, pixelSize + 0.5, pixelSize + 0.5)
-            newPixels.delete(key)
-          } else {
-            // 添加或更新像素 - 使用稍大的尺寸消除缝隙
-            offscreenCtx.fillStyle = pixelData.color
-            offscreenCtx.fillRect(
-              pixelData.x,
-              pixelData.y,
-              pixelSize + 0.5,
-              pixelSize + 0.5
-            )
-            newPixels.set(key, pixelData)
-          }
-        })
-
-        // 触发Konva重绘
-        if (stageRef.current) {
-          const pixelsImage = (stageRef.current as any).pixelsImage
-          if (pixelsImage) {
-            pixelsImage.getLayer()?.batchDraw()
-          }
+          offscreenCtx.clearRect(x, y, pixelSize + 0.5, pixelSize + 0.5)
+        } else {
+          // 添加或更新像素 - 使用稍大的尺寸消除缝隙
+          offscreenCtx.fillStyle = pixelData.color
+          offscreenCtx.fillRect(
+            pixelData.x,
+            pixelData.y,
+            pixelSize + 0.5,
+            pixelSize + 0.5
+          )
         }
-      } else {
-        // 没有离屏canvas时的回退逻辑
-        pixelsToUpdate.forEach((pixelData, key) => {
-          if (pixelData === null) {
-            newPixels.delete(key)
-          } else {
-            newPixels.set(key, pixelData)
-          }
-        })
+      })
+
+      // 触发Konva重绘
+      if (stageRef.current) {
+        const pixelsImage = (stageRef.current as any).pixelsImage
+        if (pixelsImage) {
+          pixelsImage.getLayer()?.batchDraw()
+        }
       }
-      // 不在这里保存历史记录，而是在绘制操作结束时保存
-      return newPixels
-    })
-  }, [pixelSize])
+    }
+
+    // 更新 zustand store
+    updatePixels(pixelsToUpdate)
+  }, [pixelSize, updatePixels])
 
   // Bresenham 直线算法 - 填补两点之间的像素（支持画笔大小，批量更新）
   const drawLine = useCallback(
@@ -407,89 +227,82 @@ useImperativeHandle(
     [brushSize, collectPixels, collectBrushPixels, applyPixelUpdates]
   )
 
-  // 获取指定位置的颜色
-  const getPixelColor = useCallback(
-    (col: number, row: number, pixelsMap: Map<string, PixelData>): string | null => {
-      const key = `${col},${row}`
-      const pixel = pixelsMap.get(key)
-      return pixel ? pixel.color : null
-    },
-    []
-  )
-
   // 油漆桶填充算法（Flood Fill）- 使用增量更新和批量重绘
   const floodFill = useCallback(
     (startCol: number, startRow: number) => {
       const offscreenCtx = offscreenCtxRef.current
 
-      setPixels((prev) => {
-        const newPixels = new Map(prev)
-        const targetColor = getPixelColor(startCol, startRow, prev)
-        const fillColor = currentColor
+      // 获取当前像素数据的副本
+      const currentPixels = new Map(pixels)
+      const targetColor = getPixelAt(startCol, startRow)?.color || null
+      const fillColor = currentColor
 
-        // 如果目标颜色和填充颜色相同，不需要填充
-        if (targetColor === fillColor) {
-          return prev
+      // 如果目标颜色和填充颜色相同，不需要填充
+      if (targetColor === fillColor) {
+        return
+      }
+
+      const newPixels = new Map(currentPixels)
+      const pixelsToUpdate = new Map<string, PixelData | null>()
+
+      // 使用队列实现广度优先搜索（BFS）
+      const queue: Array<{ col: number; row: number }> = [{ col: startCol, row: startRow }]
+      const visited = new Set<string>()
+
+      while (queue.length > 0) {
+        const { col, row } = queue.shift()!
+        const key = `${col},${row}`
+
+        // 检查是否越界或已访问
+        if (col < 0 || col >= gridSize || row < 0 || row >= gridSize || visited.has(key)) {
+          continue
         }
 
-        // 使用队列实现广度优先搜索（BFS）
-        const queue: Array<{ col: number; row: number }> = [{ col: startCol, row: startRow }]
-        const visited = new Set<string>()
-
-        while (queue.length > 0) {
-          const { col, row } = queue.shift()!
-          const key = `${col},${row}`
-
-          // 检查是否越界或已访问
-          if (col < 0 || col >= gridSize || row < 0 || row >= gridSize || visited.has(key)) {
-            continue
-          }
-
-          // 检查当前像素颜色是否与目标颜色匹配
-          const currentPixelColor = getPixelColor(col, row, newPixels)
-          if (currentPixelColor !== targetColor) {
-            continue
-          }
-
-          // 标记为已访问
-          visited.add(key)
-
-          // 填充当前像素
-          const pixelData = {
-            x: col * pixelSize,
-            y: row * pixelSize,
-            color: fillColor,
-          }
-          newPixels.set(key, pixelData)
-
-          // 增量更新到离屏canvas - 使用稍大的尺寸消除缝隙
-          if (offscreenCtx) {
-            offscreenCtx.fillStyle = fillColor
-            offscreenCtx.fillRect(pixelData.x, pixelData.y, pixelSize + 0.5, pixelSize + 0.5)
-          }
-
-          // 将四个相邻像素加入队列
-          queue.push({ col: col + 1, row })
-          queue.push({ col: col - 1, row })
-          queue.push({ col, row: row + 1 })
-          queue.push({ col, row: row - 1 })
+        // 检查当前像素颜色是否与目标颜色匹配
+        const currentPixelColor = newPixels.get(key)?.color || null
+        if (currentPixelColor !== targetColor) {
+          continue
         }
 
-        // 最终重绘
-        if (offscreenCtx && stageRef.current) {
-          const pixelsImage = (stageRef.current as any).pixelsImage
-          if (pixelsImage) {
-            pixelsImage.getLayer()?.batchDraw()
-          }
+        // 标记为已访问
+        visited.add(key)
+
+        // 填充当前像素
+        const pixelData = {
+          x: col * pixelSize,
+          y: row * pixelSize,
+          color: fillColor,
+        }
+        newPixels.set(key, pixelData)
+        pixelsToUpdate.set(key, pixelData)
+
+        // 增量更新到离屏canvas - 使用稍大的尺寸消除缝隙
+        if (offscreenCtx) {
+          offscreenCtx.fillStyle = fillColor
+          offscreenCtx.fillRect(pixelData.x, pixelData.y, pixelSize + 0.5, pixelSize + 0.5)
         }
 
-        // 保存历史记录
-        saveHistory(newPixels)
+        // 将四个相邻像素加入队列
+        queue.push({ col: col + 1, row })
+        queue.push({ col: col - 1, row })
+        queue.push({ col, row: row + 1 })
+        queue.push({ col, row: row - 1 })
+      }
 
-        return newPixels
-      })
+      // 最终重绘
+      if (offscreenCtx && stageRef.current) {
+        const pixelsImage = (stageRef.current as any).pixelsImage
+        if (pixelsImage) {
+          pixelsImage.getLayer()?.batchDraw()
+        }
+      }
+
+      // 更新 store
+      updatePixels(pixelsToUpdate)
+      // 保存历史记录
+      saveHistory()
     },
-    [currentColor, gridSize, pixelSize, getPixelColor, saveHistory]
+    [currentColor, gridSize, pixelSize, pixels, getPixelAt, updatePixels, saveHistory]
   )
 
   // 鼠标按下
@@ -590,10 +403,7 @@ useImperativeHandle(
   const handleMouseUp = () => {
     if (isDrawing) {
       // 绘制结束时保存历史记录
-      setPixels((prev) => {
-        saveHistory(prev)
-        return prev
-      })
+      saveHistory()
     }
     setIsDrawing(false)
     lastPosRef.current = null
@@ -613,6 +423,11 @@ useImperativeHandle(
 
     offscreenCanvasRef.current = offscreenCanvas
     offscreenCtxRef.current = offscreenCtx
+
+    // 将 canvas 引用和配置设置到 store
+    setOffscreenCanvas(offscreenCanvas)
+    setGridSize(gridSize)
+    setPixelSize(pixelSize)
 
     // 销毁旧的 stage
     if (stageRef.current) {
@@ -682,8 +497,9 @@ useImperativeHandle(
       }
       offscreenCanvasRef.current = null
       offscreenCtxRef.current = null
+      setOffscreenCanvas(null)
     }
-  }, [canvasWidth, canvasHeight, gridSize, pixelSize])
+  }, [canvasWidth, canvasHeight, gridSize, pixelSize, setOffscreenCanvas, setGridSize, setPixelSize])
 
   // 更新棋盘格背景显示
   useEffect(() => {
@@ -776,5 +592,5 @@ useImperativeHandle(
       <div id="canvas-container"></div>
     </div>
   )
-})
+}
 

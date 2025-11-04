@@ -1,8 +1,9 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import DrawingToolbar from './components/DrawingToolbar'
 import { PropertiesPanel } from './components/PropertiesPanel'
-import { PixelCanvas, type PixelCanvasHandle } from './components/PixelCanvas'
+import { PixelCanvas } from './components/PixelCanvas'
 import { TopControlBar } from './components/TopControlBar'
+import { usePixelStore } from './store/usePixelStore'
 
 function App() {
   const [currentColor, setCurrentColor] = useState('#000000')
@@ -13,31 +14,35 @@ function App() {
   const [canRedo, setCanRedo] = useState(false)
   const [showCheckerboard, setShowCheckerboard] = useState(true)
 
-  // ⭐ 创建 ref
-  const canvasRef = useRef<PixelCanvasHandle>(null)
+  // 从 store 获取操作方法
+  const clearStore = usePixelStore((state) => state.clear)
+  const exportImage = usePixelStore((state) => state.exportImage)
+  const importImage = usePixelStore((state) => state.importImage)
+  const undo = usePixelStore((state) => state.undo)
+  const redo = usePixelStore((state) => state.redo)
 
-  // ⭐ 直接调用 ref 的方法
+  // ⭐ 直接调用 store 的方法
   const handleClear = useCallback(() => {
     if (confirm('确定要清空画布吗？')) {
-      canvasRef.current?.clear()
+      clearStore()
     }
-  }, [])
+  }, [clearStore])
 
   const handleExport = useCallback(() => {
-    canvasRef.current?.exportImage()
-  }, [])
+    exportImage()
+  }, [exportImage])
 
   const handleImport = useCallback(() => {
-    canvasRef.current?.importImage()
-  }, [])
+    importImage()
+  }, [importImage])
 
   const handleUndo = useCallback(() => {
-    canvasRef.current?.undo()
-  }, [])
+    undo()
+  }, [undo])
 
   const handleRedo = useCallback(() => {
-    canvasRef.current?.redo()
-  }, [])
+    redo()
+  }, [redo])
 
   const handleHistoryChange = useCallback((undo: boolean, redo: boolean) => {
     setCanUndo(undo)
@@ -66,8 +71,8 @@ function App() {
 
   const handleGridSizeChange = useCallback((newSize: number) => {
       setGridSize(newSize)
-      canvasRef.current?.clear()
-  }, [])
+      clearStore()
+  }, [clearStore])
 
 
 
@@ -84,7 +89,6 @@ function App() {
       {/* 顶部控制栏 */}
       <TopControlBar
         gridSize={gridSize}
-        currentColor={currentColor}
         canUndo={canUndo}
         canRedo={canRedo}
         onGridSizeChange={handleGridSizeChange}
@@ -106,7 +110,6 @@ function App() {
         {/* 中间画布区域 */}
         <div className="flex-1 flex items-center justify-center bg-white">
           <PixelCanvas
-            ref={canvasRef}
             gridSize={gridSize}
             pixelSize={getPixelSize(gridSize)}
             currentColor={currentColor}
