@@ -36,6 +36,7 @@ interface PixelStore {
   // 画布操作
   clear: () => void
   loadPixels: (pixels: Map<string, PixelData>) => void
+  resizeCanvas: (newGridSize: number, newPixelSize: number) => void
   exportImage: () => void
   importImage: () => void
 
@@ -199,6 +200,48 @@ export const usePixelStore = create<PixelStore>((set, get) => ({
       pixels: new Map(pixels),
     })
     get().saveHistory(pixels)
+  },
+
+  // 调整画布大小并保持像素的网格坐标不变
+  resizeCanvas: (newGridSize, newPixelSize) => {
+    const state = get()
+    const oldPixels = state.pixels
+
+    // 如果没有内容，直接更新尺寸
+    if (oldPixels.size === 0) {
+      set({
+        gridSize: newGridSize,
+        pixelSize: newPixelSize,
+      })
+      return
+    }
+
+    // 重新映射所有像素，保持网格坐标不变，只更新实际像素坐标
+    const newPixels = new Map<string, PixelData>()
+
+    oldPixels.forEach((pixel) => {
+      // 从像素坐标计算原始的网格坐标
+      const col = Math.floor(pixel.x / state.pixelSize)
+      const row = Math.floor(pixel.y / state.pixelSize)
+
+      // 保持网格坐标不变，只更新实际坐标
+      // 如果网格坐标超出新画布范围，则丢弃该像素
+      if (col >= 0 && col < newGridSize && row >= 0 && row < newGridSize) {
+        const key = `${col},${row}`
+        newPixels.set(key, {
+          x: col * newPixelSize,
+          y: row * newPixelSize,
+          color: pixel.color,
+        })
+      }
+    })
+
+    // 更新状态（不保存到历史记录，因为这只是画布属性的变化）
+    set({
+      pixels: newPixels,
+      gridSize: newGridSize,
+      pixelSize: newPixelSize,
+    })
   },
 
   // 获取指定位置的像素

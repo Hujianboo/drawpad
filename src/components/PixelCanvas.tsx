@@ -306,7 +306,7 @@ export const PixelCanvas = ({
   )
 
   // 鼠标按下
-  const handleMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
+  const handleMouseDown = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
     const stage = e.target.getStage()
     if (!stage) return
     const pos = stage.getPointerPosition()
@@ -346,10 +346,10 @@ export const PixelCanvas = ({
       collectBrushPixels(coords.col, coords.row, pixelsToUpdate)
     }
     applyPixelUpdates(pixelsToUpdate)
-  }
+  }, [currentTool, pixels, onColorPick, onToolChange, floodFill, setIsDrawing, getPixelCoords, brushSize, collectPixels, collectBrushPixels, applyPixelUpdates])
 
   // 鼠标移动 - 支持全局移动
-  const handleMouseMove = (e: Konva.KonvaEventObject<MouseEvent> | MouseEvent) => {
+  const handleMouseMove = useCallback((e: Konva.KonvaEventObject<MouseEvent> | MouseEvent) => {
     if (!isDrawing) return
     const stage = stageRef.current
     if (!stage) return
@@ -397,17 +397,17 @@ export const PixelCanvas = ({
       }
       lastPosRef.current = coords
     }
-  }
+  }, [isDrawing, getPixelCoords, drawLine, brushSize, collectPixels, collectBrushPixels, applyPixelUpdates])
 
   // 鼠标抬起
-  const handleMouseUp = () => {
+  const handleMouseUp = useCallback(() => {
     if (isDrawing) {
       // 绘制结束时保存历史记录
       saveHistory()
     }
     setIsDrawing(false)
     lastPosRef.current = null
-  }
+  }, [isDrawing, saveHistory, setIsDrawing])
 
   // 初始化离屏canvas和Konva Stage
   useEffect(() => {
@@ -489,6 +489,23 @@ export const PixelCanvas = ({
     ;(stage as any).offscreenCtx = offscreenCtx
     layer.draw()
     stageRef.current = stage
+
+    // 立即重绘现有的像素数据到新的离屏canvas（使用当前 store 中的 pixels）
+    if (offscreenCtx) {
+      const currentPixels = usePixelStore.getState().pixels
+      if (currentPixels.size > 0) {
+        currentPixels.forEach((pixel) => {
+          offscreenCtx.fillStyle = pixel.color
+          offscreenCtx.fillRect(
+            pixel.x,
+            pixel.y,
+            pixelSize + 0.5,
+            pixelSize + 0.5
+          )
+        })
+        pixelsImage.getLayer()?.batchDraw()
+      }
+    }
 
     return () => {
       if (stageRef.current) {

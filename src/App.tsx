@@ -16,6 +16,7 @@ function App() {
 
   // 从 store 获取操作方法
   const clearStore = usePixelStore((state) => state.clear)
+  const resizeCanvas = usePixelStore((state) => state.resizeCanvas)
   const exportImage = usePixelStore((state) => state.exportImage)
   const importImage = usePixelStore((state) => state.importImage)
   const undo = usePixelStore((state) => state.undo)
@@ -71,8 +72,9 @@ function App() {
 
   const handleGridSizeChange = useCallback((newSize: number) => {
       setGridSize(newSize)
-      clearStore()
-  }, [clearStore])
+      const newPixelSize = getPixelSize(newSize)
+      resizeCanvas(newSize, newPixelSize)
+  }, [resizeCanvas])
 
 
 
