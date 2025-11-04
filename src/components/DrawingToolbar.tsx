@@ -1,288 +1,63 @@
-import { useState, useEffect } from 'react'
-
 interface DrawingToolbarProps {
-  currentColor: string
   currentTool: 'pen' | 'eraser' | 'eyedropper' | 'bucket'
-  brushSize: number
-  onColorChange: (color: string) => void
   onToolChange: (tool: 'pen' | 'eraser' | 'eyedropper' | 'bucket') => void
-  onBrushSizeChange: (size: number) => void
 }
 
 export default function DrawingToolbar({
-  currentColor,
   currentTool,
-  brushSize,
-  onColorChange,
   onToolChange,
-  onBrushSizeChange,
 }: DrawingToolbarProps) {
-  const [rgb, setRgb] = useState({ r: 255, g: 0, b: 0 })
-  const [hue, setHue] = useState(0)
-  const [saturation, setSaturation] = useState(100)
-  const [brightness, setBrightness] = useState(100)
 
-  // 将 hex 转换为 RGB
-  useEffect(() => {
-    const hex = currentColor.replace('#', '')
-    const r = parseInt(hex.substring(0, 2), 16)
-    const g = parseInt(hex.substring(2, 4), 16)
-    const b = parseInt(hex.substring(4, 6), 16)
-    setRgb({ r, g, b })
-  }, [currentColor])
-
-  // RGB 转换为 hex
-  const rgbToHex = (r: number, g: number, b: number) => {
-    return '#' + [r, g, b].map(x => {
-      const hex = Math.max(0, Math.min(255, Math.round(x))).toString(16)
-      return hex.length === 1 ? '0' + hex : hex
-    }).join('')
-  }
-
-  // HSV 转 RGB
-  const hsvToRgb = (h: number, s: number, v: number) => {
-    h = h / 360
-    s = s / 100
-    v = v / 100
-
-    let r = 0, g = 0, b = 0
-    const i = Math.floor(h * 6)
-    const f = h * 6 - i
-    const p = v * (1 - s)
-    const q = v * (1 - f * s)
-    const t = v * (1 - (1 - f) * s)
-
-    switch (i % 6) {
-      case 0: r = v; g = t; b = p; break
-      case 1: r = q; g = v; b = p; break
-      case 2: r = p; g = v; b = t; break
-      case 3: r = p; g = q; b = v; break
-      case 4: r = t; g = p; b = v; break
-      case 5: r = v; g = p; b = q; break
-    }
-
-    return {
-      r: Math.round(r * 255),
-      g: Math.round(g * 255),
-      b: Math.round(b * 255)
-    }
-  }
-
-  const handleRgbChange = (type: 'r' | 'g' | 'b', value: number) => {
-    const newRgb = { ...rgb, [type]: value }
-    setRgb(newRgb)
-    onColorChange(rgbToHex(newRgb.r, newRgb.g, newRgb.b))
-  }
-
-  const handleHueChange = (newHue: number) => {
-    setHue(newHue)
-    const color = hsvToRgb(newHue, saturation, brightness)
-    onColorChange(rgbToHex(color.r, color.g, color.b))
-  }
-
-  const handleSVChange = (s: number, v: number) => {
-    setSaturation(s)
-    setBrightness(v)
-    const color = hsvToRgb(hue, s, v)
-    onColorChange(rgbToHex(color.r, color.g, color.b))
-  }
+  const tools = [
+    {
+      id: 'pen' as const,
+      label: 'Pen',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+        </svg>
+      )
+    },
+    {
+      id: 'eraser' as const,
+      label: 'Eraser',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+        </svg>
+      )
+    },
+    {
+      id: 'bucket' as const,
+      label: 'Fill',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+        </svg>
+      )
+    },
+  ]
 
   return (
-    <div className="w-64 bg-gray-50  p-6 flex flex-col gap-6 overflow-y-auto">
+    <div className="w-20 bg-gray-50 p-3 flex flex-col gap-3 border-r border-gray-200">
       {/* 工具按钮 */}
-      <div className="grid grid-cols-2 gap-2">
-        <button
-          onClick={() => onToolChange('pen')}
-          className={`px-4 py-2 rounded-lg font-medium transition-all ${
-            currentTool === 'pen'
-                ? 'bg-gray-200  text-gray-900 '
-              : 'bg-white  text-gray-700  hover:bg-gray-100 '
-          }`}
-        >
-          Pen
-        </button>
-        <button
-          onClick={() => onToolChange('eraser')}
-          className={`px-4 py-2 rounded-lg font-medium transition-all ${
-            currentTool === 'eraser'
-              ? 'bg-gray-200  text-gray-900 '
-              : 'bg-white  text-gray-700  hover:bg-gray-100 '
-          }`}
-        >
-          Erase
-        </button>
-        <button
-          onClick={() => onToolChange('bucket')}
-          className={`px-4 py-2 rounded-lg font-medium transition-all ${
-            currentTool === 'bucket'
-              ? 'bg-gray-200  text-gray-900 '
-              : 'bg-white  text-gray-700  hover:bg-gray-100 '
-          }`}
-        >
-          Fill
-        </button>
-        <button
-          onClick={() => onToolChange('eyedropper')}
-          className={`px-4 py-2 rounded-lg font-medium transition-all ${
-            currentTool === 'eyedropper'
-              ? 'bg-gray-200  text-gray-900 '
-              : 'bg-white  text-gray-700  hover:bg-gray-100 '
-          }`}
-        >
-          Pick
-        </button>
-      </div>
-
-      {/* 颜色选择器 */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-gray-700  uppercase">Colour Picker</h3>
-          <button className="text-gray-500  hover:text-gray-700 ">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-            </svg>
+      <div className="flex flex-col gap-2">
+        {tools.map((tool) => (
+          <button
+            key={tool.id}
+            onClick={() => onToolChange(tool.id)}
+            className={`w-full aspect-square p-3 rounded-lg transition-all flex flex-col items-center justify-center gap-1 ${
+              currentTool === tool.id
+                ? 'bg-gray-800 text-white'
+                : 'bg-white text-gray-700 hover:bg-gray-200'
+            }`}
+            title={tool.label}
+          >
+            {tool.icon}
+            <span className="text-[10px] font-medium">{tool.label}</span>
           </button>
-        </div>
-
-        {/* 颜色渐变选择器 */}
-        <div className="relative mb-3">
-          <div
-            className="w-full h-48 rounded-lg cursor-crosshair relative overflow-hidden"
-            style={{
-              backgroundColor: `hsl(${hue}, 100%, 50%)`
-            }}
-            onClick={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect()
-              const x = e.clientX - rect.left
-              const y = e.clientY - rect.top
-              const s = (x / rect.width) * 100
-              const v = 100 - (y / rect.height) * 100
-              handleSVChange(s, v)
-            }}
-          >
-            {/* 白色到透明渐变 */}
-            <div className="absolute inset-0" style={{
-              background: 'linear-gradient(to right, white, transparent)'
-            }}></div>
-            {/* 透明到黑色渐变 */}
-            <div className="absolute inset-0" style={{
-              background: 'linear-gradient(to bottom, transparent, black)'
-            }}></div>
-            {/* 颜色指示器 */}
-            <div
-              className="absolute w-4 h-4 border-2 border-white rounded-full shadow-lg transform -translate-x-1/2 -translate-y-1/2 pointer-events-none"
-              style={{
-                left: `${saturation}%`,
-                top: `${100 - brightness}%`,
-                backgroundColor: currentColor
-              }}
-            ></div>
-          </div>
-        </div>
-
-        {/* 色相条 */}
-        <div className="mb-4 relative">
-          <div
-            className="w-full h-6 rounded-full cursor-pointer"
-            style={{
-              background: 'linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)'
-            }}
-            onClick={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect()
-              const x = e.clientX - rect.left
-              const newHue = (x / rect.width) * 360
-              handleHueChange(newHue)
-            }}
-          >
-            <div
-              className="absolute w-3 h-3 border-2 border-white rounded-full shadow-lg transform -translate-x-1/2 -translate-y-1/2 top-1/2"
-              style={{
-                left: `${(hue / 360) * 100}%`,
-                backgroundColor: `hsl(${hue}, 100%, 50%)`
-              }}
-            ></div>
-          </div>
-        </div>
-
-        {/* RGB 值输入 */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-medium text-gray-600 ">RGB</label>
-            <button className="text-xs text-gray-500  hover:text-gray-700 ">▼</button>
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            <input
-              type="number"
-              min="0"
-              max="255"
-              value={rgb.r}
-              onChange={(e) => handleRgbChange('r', parseInt(e.target.value) || 0)}
-              className="px-2 py-1.5 bg-white  border border-gray-300  rounded text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <input
-              type="number"
-              min="0"
-              max="255"
-              value={rgb.g}
-              onChange={(e) => handleRgbChange('g', parseInt(e.target.value) || 0)}
-              className="px-2 py-1.5 bg-white  border border-gray-300  rounded text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <input
-              type="number"
-              min="0"
-              max="255"
-              value={rgb.b}
-              onChange={(e) => handleRgbChange('b', parseInt(e.target.value) || 0)}
-              className="px-2 py-1.5 bg-white  border border-gray-300  rounded text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        </div>
+        ))}
       </div>
-
-      {/* 画笔大小 */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-gray-700  uppercase">Brush Size</h3>
-          <span className="text-sm text-gray-600 ">{brushSize} px</span>
-        </div>
-        {/* 预设大小快捷按钮 */}
-        <div className="flex items-center justify-between gap-2">
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((size) => (
-            <button
-              key={size}
-              onClick={() => onBrushSizeChange(size)}
-              className={`flex items-center justify-center transition-all hover:bg-gray-200 rounded ${
-                brushSize === size ? 'bg-gray-200' : ''
-              }`}
-              style={{
-                width: '20px',
-                height: '20px',
-              }}
-              title={`${size}px`}
-            >
-              <div
-                className={`rounded-full transition-all ${
-                  brushSize === size ? 'bg-gray-800' : 'bg-gray-400'
-                }`}
-                style={{
-                  width: `${size * 1.5}px`,
-                  height: `${size * 1.5}px`,
-                  maxWidth: '15px',
-                  maxHeight: '15px',
-                }}
-              ></div>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* 快捷键 */}
-      {/* <div>
-        <button className="w-full flex items-center justify-between py-2 text-sm font-semibold text-gray-700  uppercase">
-          <span>Shortcuts</span>
-          <span>›</span>
-        </button>
-      </div> */}
     </div>
   )
 }
